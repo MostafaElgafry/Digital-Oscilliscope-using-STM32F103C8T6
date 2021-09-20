@@ -1,0 +1,82 @@
+
+void ADC_Call(u16 Copy_u16ADCRead)
+{
+
+	volatile static u32 Local_u8PixelCounts = 1,C15 = 0;
+	volatile static s16 Temp[2000]={0};
+	volatile static s16 Local_YPositions[159]={0};
+	volatile static s16 Local_YPositionsold[159]={0};
+	volatile static f32 Local_f32MaxSample=0;
+	volatile static f32 Local_f32MinSample=0xFFFF;
+
+	Temp[(Local_u8PixelCounts++)-1] = Copy_u16ADCRead-2048;
+
+	if (Local_u8PixelCounts%TIME_DIVISION==0)
+	{
+		Local_YPositions[C15++]=average(Temp,TIME_DIVISION);
+		for (u16 i =0;i<=TIME_DIVISION;i++)
+			Temp[i]=0;
+		Local_u8PixelCounts = 1;
+	}
+
+
+	if(C15 == 158)
+	{
+		C15=1;
+		//Map(Local_YPositions,158,-2048,2048,8,120);
+		for (u8 i = 1; i<159 ;i++)
+		{
+			Local_YPositions[i] = ((Local_YPositions[i]+2048)*120)/4096;
+			Local_YPositions[i] /= VOLTAGE_DIVISION;
+			HTFT_DrawPixel(i,60-Local_YPositionsold[i], ScopeScreen[i-1][Local_YPositionsold[i]-1]);
+			HTFT_DrawPixel(i,60-Local_YPositions[i],RED);
+			if (Local_YPositionsold[i]>Local_f32MaxSample)
+				Local_f32MaxSample = Local_YPositions[i];
+			if (Local_YPositionsold[i]<Local_f32MinSample)
+				Local_f32MinSample = Local_YPositions[i];
+			Local_YPositionsold[i] = Local_YPositions[i];
+		}
+
+		MTIMER2_voidClearFlags();
+		MTIMER2_voidEnableInterrupt(TIMER2_CH4_CAPT);
+		while(!FrequencyMeasured);
+		FrequencyMeasured = 0;
+		MTIMER2_voidDisableInterrupt(TIMER2_CH4_CAPT);
+////////////////////////////////////////////////////////////////////////////////////
+		char F[5];
+		sprintf(F,"%u",SignalFrequency);
+
+		HTFT_voidFill(102,121,145,126,BLACK);
+		HTFT_DrawText(F,108,120,YELLOW);
+
+		HTFT_DrawText("HZ",140,120,WHITE);
+
+		Local_f32MaxSample =(Local_f32MaxSample*VOLTAGE_DIVISION)*3.3/4096.0;
+		Local_f32MinSample =(Local_f32MinSample*VOLTAGE_DIVISION)*3.3/4096.0;
+		char VPP[10];
+		ftoa(Local_f32MaxSample-Local_f32MinSample,VPP,2);
+
+		if(VPP[0] == '.')
+		{
+			VPP[4]=VPP[3];
+			VPP[3]=VPP[2];
+			VPP[2]=VPP[1];
+			VPP[1]=VPP[0];
+			VPP[0]='0';
+		}
+
+		HTFT_voidFill(37,121,65,126,BLACK);
+		HTFT_DrawText(VPP,40,120,YELLOW);
+		HTFT_DrawText("V",70,120,WHITE);
+		HTFT_DrawText(VPP,40,120,YELLOW);
+
+		MSTK_voidSetBusyWait(30000);
+	}
+}
+
+void Delay(u16 A)
+{
+	u16 i=A, j=A;
+	while(i--)
+		while(j--);
+}
